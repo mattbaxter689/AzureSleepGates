@@ -3,44 +3,13 @@ import logging
 from pathlib import Path
 
 import mlflow
-import numpy as np
-from scipy import stats
 
 from data.preprocessing import infer_schema, load_baseline_data, load_data
+from drift.config.load import load_drift_config
+from drift.detection import run_drift_checks
 from utils.logging_utils import configure_mlflow, setup_logging
 
 logger = logging.getLogger(__name__)
-
-
-def _psi_for_column(
-    baseline: np.ndarray, current: np.ndarray, n_bins: int = 10, eps: float = 1e-6
-) -> float:
-    """
-    Compute Population Stability Index between baseline and current distributions.
-    PSI < 0.10  → No significant change
-    PSI 0.10–0.20 → Moderate change (warning)
-    PSI > 0.20  → Significant change (drift)
-    """
-    global_min = min(baseline.min(), current.min())
-    global_max = max(baseline.max(), current.max())
-    bins = np.linspace(global_min, global_max, n_bins + 1)
-
-    baseline_counts, _ = np.histogram(baseline, bins=bins)
-    current_counts, _ = np.histogram(current, bins=bins)
-
-    baseline_pct = (baseline_counts / len(baseline)) + eps
-    current_pct = (current_counts / len(current)) + eps
-
-    psi = float(
-        np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
-    )
-    return psi
-
-
-def _ks_test(baseline: np.ndarray, current: np.ndarray) -> tuple[float, float]:
-    """Return (statistic, p_value) from the KS two-sample test."""
-    result = stats.ks_2samp(baseline, current)
-    return float(result.statistic), float(result.pvalue)
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,9 +27,9 @@ def parse_args() -> argparse.Namespace:
         help="Mounted input path for new data to check",
     )
     p.add_argument(
-        "--drift-threshold",
-        type=float,
-        default=0.25,
+        "--config",
+        type=Path,
+        default=Path("configs/drift_config.yaml"),
         help="PSI threshold. Defaults to 0.25",
     )
     p.add_argument(
@@ -75,6 +44,9 @@ def parse_args() -> argparse.Namespace:
 def run(args: argparse.Namespace) -> bool:
     setup_logging()
     configure_mlflow()
+
+    drift_config = load_drift_config(args.config)
+
     mlflow.set_tag("gate", "drift-detection")
 
     baseline_stats = load_baseline_data(args.new_data_version)
@@ -87,44 +59,11 @@ def run(args: argparse.Namespace) -> bool:
     logger.info("Inferring schema from baseline")
     num_cols, _ = infer_schema(train)
 
+    drift_results, drifted_features, missing_columns = run_drift_checks(
+        train, num_cols, drift_config, baseline_stats
+    )
+
     # ---- Compute PSI and KS per feature
-    drift_results: dict[str, dict] = {}
-    drifted_features: list[str] = []
-    missing_columns = 0
-
-    for col in num_cols:
-        if col not in train.columns:
-            logger.warning(f"Column {col} missing from current data - skipping")
-            missing_columns += 1
-            continue
-
-        current_vals = train[col].dropna().values
-        bstats = baseline_stats[col]
-        rng = np.random.default_rng(42)
-        baseline_vals = rng.normal(
-            loc=bstats["mean"],
-            scale=max(bstats["std"], 1e-6),
-            size=bstats["n"],
-        )
-
-        psi = _psi_for_column(baseline_vals, current_vals)
-        ks_stat, ks_pval = _ks_test(baseline_vals, current_vals)
-
-        drift_results[col] = {
-            "psi": psi,
-            "ks_stat": ks_stat,
-            "ks_pval": ks_pval,
-            "drifted": psi > args.drift_threshold,
-        }
-
-        if psi > args.drift_threshold:
-            drifted_features.append(col)
-            logger.warning(
-                f"DRIFT detected in {col}: PSI={psi:.4f} > threshold={args.drift_threshold:.4f}"
-            )
-        else:
-            logger.info(f"Stable: {col} PSI={psi:.4f}")
-
     mlflow.log_dict(drift_results, "drift_results/drift_results.json")
 
     max_psi = max((r["psi"] for r in drift_results.values()), default=0.0)
