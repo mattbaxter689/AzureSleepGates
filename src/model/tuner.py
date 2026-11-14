@@ -13,12 +13,6 @@ from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers.mlflow import MLFlowLogger
 from optuna.integration import PyTorchLightningPruningCallback
 
-from model.config.training_config import (
-    CategoricalParam,
-    FloatParam,
-    OptunaConfig,
-    ParamSpec,
-)
 from data.dataset import make_dataloaders
 from model.callbacks import (
     MlflowArtifactCallback,
@@ -26,6 +20,12 @@ from model.callbacks import (
     make_early_stopping,
 )
 from model.classifier import SleepClassifier
+from model.config.training_config import (
+    CategoricalParam,
+    FloatParam,
+    OptunaConfig,
+    ParamSpec,
+)
 
 os.environ["MLFLOW_DISABLE_LOGGED_MODELS"] = "true"
 

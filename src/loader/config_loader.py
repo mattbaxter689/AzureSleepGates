@@ -1,6 +1,6 @@
+import logging
 from pathlib import Path
 from typing import TypeVar
-import logging
 
 import yaml
 from pydantic import BaseModel

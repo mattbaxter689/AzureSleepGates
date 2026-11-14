@@ -5,7 +5,6 @@ from pathlib import Path
 
 import joblib
 
-from model.config.load import load_tuning_config
 from data.preprocessing import (
     TARGET_COL,
     encode_features,
@@ -13,6 +12,7 @@ from data.preprocessing import (
     load_data,
     load_drift_output,
 )
+from model.config.load import load_tuning_config
 from model.tuner import final_training_run, run_tuning
 from utils.logging_utils import setup_logging
 
@@ -47,7 +47,6 @@ def run(args: argparse.Namespace) -> str:
     logger.info(f"Drift output from drift gate: {result}")
 
     if result == "drifted":
-
         config = load_tuning_config()
 
         train, val, test = load_data(args.training_data)

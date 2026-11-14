@@ -8,8 +8,8 @@ from azure.identity import DefaultAzureCredential
 from rich.console import Console
 from rich.panel import Panel
 
-from src.orchestrator.loader import load_orchestrator_config
 from src.orchestrator.config import OrchestratorConfig
+from src.orchestrator.loader import load_orchestrator_config
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
 log = logging.getLogger("orchestrator")
