@@ -1,8 +1,10 @@
-from drift.config.drift_config import DriftConfig
-import numpy as np
-from scipy import stats
-import pandas as pd
 import logging
+
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+from drift.config.drift_config import DriftConfig
 
 logger = logging.getLogger(__name__)
 
