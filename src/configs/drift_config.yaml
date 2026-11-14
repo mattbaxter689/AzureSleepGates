@@ -1,0 +1,8 @@
+drift:
+  threshold: 0.25
+  rng: 42
+  scale: 1e-6
+
+psi:
+  n_bins: 10
+  eps: 1e-6
