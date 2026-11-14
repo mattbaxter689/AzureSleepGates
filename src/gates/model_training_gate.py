@@ -36,6 +36,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--final-run", type=str, required=True, help="The final run id for model"
     )
+    p.add_argument(
+        "--config",
+        type=Path,
+        default=Path("configs/training_config.yaml"),
+        help="Config path for model tuning",
+    )
     return p.parse_args()
 
 
@@ -47,7 +53,7 @@ def run(args: argparse.Namespace) -> str:
     logger.info(f"Drift output from drift gate: {result}")
 
     if result == "drifted":
-        config = load_tuning_config()
+        config = load_tuning_config(args.config)
 
         train, val, test = load_data(args.training_data)
         num_cols, cat_cols = infer_schema(train)
