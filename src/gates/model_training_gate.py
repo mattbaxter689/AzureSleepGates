@@ -5,7 +5,7 @@ from pathlib import Path
 
 import joblib
 
-from config.loader import load_training_config
+from model.config.load import load_tuning_config
 from data.preprocessing import (
     TARGET_COL,
     encode_features,
@@ -48,7 +48,7 @@ def run(args: argparse.Namespace) -> str:
 
     if result == "drifted":
 
-        config = load_training_config()
+        config = load_tuning_config()
 
         train, val, test = load_data(args.training_data)
         num_cols, cat_cols = infer_schema(train)

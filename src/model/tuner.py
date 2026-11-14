@@ -13,7 +13,12 @@ from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers.mlflow import MLFlowLogger
 from optuna.integration import PyTorchLightningPruningCallback
 
-from config.training_config import CategoricalParam, FloatParam, OptunaConfig, ParamSpec
+from model.config.training_config import (
+    CategoricalParam,
+    FloatParam,
+    OptunaConfig,
+    ParamSpec,
+)
 from data.dataset import make_dataloaders
 from model.callbacks import (
     MlflowArtifactCallback,
