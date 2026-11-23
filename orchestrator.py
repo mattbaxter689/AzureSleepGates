@@ -1,9 +1,9 @@
+import argparse
 import logging
-from pathlib import Path
 import os
 import subprocess
 import sys
-import argparse
+from pathlib import Path
 
 from azure.ai.ml import Input, MLClient, Output, command, dsl
 from azure.ai.ml.entities import Command, PipelineJobSettings
