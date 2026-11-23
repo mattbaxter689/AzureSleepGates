@@ -135,16 +135,15 @@ def make_objective(
                     )
                     raise
 
-                val_f1 = trainer.callback_metrics.get("val_f1", 0.0)
+                if early_stop.best_score is None:
+                    raise RuntimeError("val_f1 was never logged")
+                val_f1 = float(early_stop.best_score)
                 mlflow.log_metric("final_val_f1", float(val_f1))
 
                 return float(val_f1)
 
             finally:
-                if model is not None:
-                    del model
-                if trainer is not None:
-                    del trainer
+                del model, trainer
                 gc.collect()
                 torch.cuda.empty_cache()
 
@@ -167,6 +166,8 @@ def run_tuning(
     study = optuna.create_study(
         direction="maximize",
         study_name="sleep-classification-tuner",
+        storage="sqlite:///optuna.db",
+        load_if_exists=True,
         pruner=optuna.pruners.MedianPruner(
             n_startup_trials=optuna_config.startup_trials,
             n_warmup_steps=optuna_config.warmup_steps,
@@ -267,8 +268,9 @@ def final_training_run(
         )
         trainer.fit(model, train_loader, val_loader)
         best_val_f1 = float(trainer.callback_metrics.get("val_f1", 0.0))
+        best_val_f1 = float(ckpt_cb.best_model_score)
 
-        test_results = trainer.test(model, test_loader, verbose=False)
+        test_results = trainer.test(model, test_loader, ckpt_path="best", verbose=False)
         if test_results:
             test_metrics = test_results[0]
 
