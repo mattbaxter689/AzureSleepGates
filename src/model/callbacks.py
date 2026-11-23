@@ -48,27 +48,6 @@ def make_checkpoint(
     )
 
 
-def make_artifact_callback(
-    ckpt_cb: ModelCheckpoint,
-    scaler_path: str,
-    encoder_path: str,
-    features: list[str],
-    dataset_uri: str,
-) -> MlflowArtifactCallback:
-    """
-    Autolog best model to Azure ML MLflow on training completion
-    based on best checkpoint. Includes associated meta data, model card
-    and scalers
-    """
-    return MlflowArtifactCallback(
-        ckpt_cb,
-        scaler_path=str(scaler_path),
-        label_encoder_path=str(encoder_path),
-        features=features,
-        dataset_uri=dataset_uri,
-    )
-
-
 class MlflowArtifactCallback(Callback):
     """
     At the end of training the final model, automatically log the
@@ -83,6 +62,7 @@ class MlflowArtifactCallback(Callback):
         label_encoder_path: str,
         features: list[str],
         dataset_uri: str,
+        git_sha: str,
     ) -> None:
         super().__init__()
         self._ckpt_cb = checkpoint_callback
@@ -90,6 +70,7 @@ class MlflowArtifactCallback(Callback):
         self._label_encoder_path = label_encoder_path
         self.features = features
         self.dataset_uri = dataset_uri
+        self.git_sha = git_sha
 
     def on_train_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
 
@@ -113,6 +94,7 @@ class MlflowArtifactCallback(Callback):
                 lightning.__version__,
                 mlflow.active_run().info.run_id,
                 self.dataset_uri,
+                self.git_sha,
                 self.features,
                 params,
                 final_metrics,
@@ -140,3 +122,26 @@ class MlflowArtifactCallback(Callback):
             logger.error(
                 "ModelCheckpoint callback did not return a valid best path. PyFunc logging aborted"
             )
+
+
+def make_artifact_callback(
+    ckpt_cb: ModelCheckpoint,
+    scaler_path: str,
+    encoder_path: str,
+    features: list[str],
+    dataset_uri: str,
+    git_sha: str,
+) -> MlflowArtifactCallback:
+    """
+    Autolog best model to Azure ML MLflow on training completion
+    based on best checkpoint. Includes associated meta data, model card
+    and scalers
+    """
+    return MlflowArtifactCallback(
+        ckpt_cb,
+        scaler_path=str(scaler_path),
+        label_encoder_path=str(encoder_path),
+        features=features,
+        dataset_uri=dataset_uri,
+        git_sha=git_sha,
+    )

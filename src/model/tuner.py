@@ -14,7 +14,7 @@ from optuna.integration import PyTorchLightningPruningCallback
 
 from data.dataset import make_dataloaders
 from model.callbacks import (
-    MlflowArtifactCallback,
+    make_artifact_callback,
     make_checkpoint,
     make_early_stopping,
 )
@@ -209,6 +209,7 @@ def final_training_run(
     encoder_path: str,
     dataset_uri: str,
     features: list[str],
+    git_sha: str,
     ckpt_dir: str = "checkpoints",
     max_epochs: int = 50,
 ) -> tuple[str, float]:
@@ -239,12 +240,8 @@ def final_training_run(
 
     ckpt_cb = make_checkpoint(ckpt_dir)
     early_stopping = make_early_stopping(patience=5)
-    artifact_db = MlflowArtifactCallback(
-        ckpt_cb,
-        scaler_path=str(scaler_path),
-        label_encoder_path=str(encoder_path),
-        features=features,
-        dataset_uri=dataset_uri,
+    artifact_db = make_artifact_callback(
+        ckpt_cb, scaler_path, encoder_path, features, dataset_uri, git_sha
     )
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")

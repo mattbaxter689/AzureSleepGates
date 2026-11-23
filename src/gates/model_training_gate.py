@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Mounted input path for new data to check",
     )
+    p.add_argument("--git-sha", type=str, required=True, help="git SHA for current run")
     p.add_argument(
         "--final-run", type=str, required=True, help="The final run id for model"
     )
@@ -117,6 +118,7 @@ def run(args: argparse.Namespace) -> str:
             dataset_uri=args.training_data,
             features=num_cols + cat_cols,
             max_epochs=config.optuna.max_epochs,
+            git_sha=args.git_sha,
         )
 
         logger.info(f"Final training complete. Best F1-score: {best_val_f1}")
