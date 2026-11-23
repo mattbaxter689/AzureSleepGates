@@ -9,7 +9,6 @@ import mlflow
 import optuna
 import pandas as pd
 import torch
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers.mlflow import MLFlowLogger
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -67,7 +66,10 @@ def make_objective(
 
     def objective(trial: optuna.Trial) -> float:
 
+        pl.seed_everything(42, workers=True)
+
         # CUDA errors requires this for my GPU training
+        # Could also be due to old CUDA instance used in project
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -107,13 +109,12 @@ def make_objective(
                 )
 
                 pruning_cb = PyTorchLightningPruningCallback(trial, monitor="val_f1")
-                early_stop = EarlyStopping(monitor="val_f1", mode="max", patience=3)
+                early_stop = make_early_stopping(patience=3, monitor="val_f1")
 
-                # 4. Bind the Lightning logger strictly to this child run ID
+                # Bind the Lightning logger strictly to this child run ID
                 mlflow_logger = MLFlowLogger(
                     tracking_uri=TRACKING_URI, run_id=child_run.info.run_id
                 )
-
                 mlflow.log_params(params)
 
                 trainer = pl.Trainer(

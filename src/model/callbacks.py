@@ -48,6 +48,27 @@ def make_checkpoint(
     )
 
 
+def make_artifact_callback(
+    ckpt_cb: ModelCheckpoint,
+    scaler_path: str,
+    encoder_path: str,
+    features: list[str],
+    dataset_uri: str,
+) -> MlflowArtifactCallback:
+    """
+    Autolog best model to Azure ML MLflow on training completion
+    based on best checkpoint. Includes associated meta data, model card
+    and scalers
+    """
+    return MlflowArtifactCallback(
+        ckpt_cb,
+        scaler_path=str(scaler_path),
+        label_encoder_path=str(encoder_path),
+        features=features,
+        dataset_uri=dataset_uri,
+    )
+
+
 class MlflowArtifactCallback(Callback):
     """
     At the end of training the final model, automatically log the
