@@ -1,4 +1,7 @@
+import argparse
 import logging
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -8,8 +11,8 @@ from azure.identity import DefaultAzureCredential
 from rich.console import Console
 from rich.panel import Panel
 
-from src.config.loader import load_orchestrator_config
-from src.config.orchestrator_config import OrchestratorConfig
+from src.orchestrate.config import OrchestratorConfig
+from src.orchestrate.loader import load_orchestrator_config
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
 log = logging.getLogger("orchestrator")
@@ -19,6 +22,27 @@ ROOT = Path(__file__).parent
 CONFIG: OrchestratorConfig = load_orchestrator_config(
     "settings/orchestrator_config.yaml"
 )
+
+
+# ----- git SHA configuration -----
+def resolve_git_sha(allow_dirty: bool = False) -> str:
+    # CI first: GitHub Actions, Azure DevOps, or your own override
+    sha = os.getenv("GITHUB_SHA")
+    if sha:
+        return sha
+
+    # local fallback, if environment not set
+    try:
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        dirty = subprocess.call(["git", "diff", "--quiet", "HEAD"]) != 0
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        raise SystemExit("Could not determine git SHA; set GIT_SHA.")
+
+    if dirty:
+        if not allow_dirty:
+            raise SystemExit("Working tree is dirty; commit or pass --allow-dirty.")
+        return f"{sha}-dirty"
+    return sha
 
 
 # ----- AML client and environment -------
@@ -98,11 +122,13 @@ def model_training_component() -> Command:
             "python -m gates.model_training_gate "
             "--drift-detected ${{inputs.drift_detected}} "
             "--training-data ${{inputs.processed_data}} "
+            "--git-sha ${{inputs.git_sha}} "
             "--final-run ${{outputs.final_run_id}}"
         ),
         inputs={
             "processed_data": Input(type="uri_folder"),
             "drift_detected": Input(type="uri_folder"),
+            "git_sha": Input(type="string"),
         },
         outputs={"final_run_id": Output(type="uri_folder", mode="rw_mount")},
     )
@@ -147,7 +173,7 @@ def model_deployment_component() -> Command:
     experiment_name=CONFIG.pipeline.experiment_name,
     default_compute=CONFIG.compute.compute_cluster,
 )
-def build_pipeline(raw_data: Input, gold_data: Input):
+def build_pipeline(raw_data: Input, gold_data: Input, git_sha: str):
     data_step = data_versioning_component()(
         raw_data=raw_data,
     )
@@ -160,6 +186,7 @@ def build_pipeline(raw_data: Input, gold_data: Input):
     model_step = model_training_component()(
         processed_data=data_step.outputs.processed_data,
         drift_detected=drift_step.outputs.drift_output,
+        git_sha=git_sha,
     )
 
     promotion_step = model_promotion_component()(
@@ -175,11 +202,17 @@ def build_pipeline(raw_data: Input, gold_data: Input):
 
 
 def main() -> None:
-    ml_client = get_client()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--allow-dirty", action="store_true")
+    cli = parser.parse_args()
 
+    ml_client = get_client()
+    git_sha = resolve_git_sha(allow_dirty=cli.allow_dirrty)
+    # The same data is the gold and new data to test drift
     pipeline_job = build_pipeline(
         raw_data=Input(type="uri_file", path=CONFIG.data.name),
         gold_data=Input(type="uri_file", path=CONFIG.data.name),
+        git_sha=git_sha,
     )
     pipeline_job.settings = PipelineJobSettings(
         force_rerun=True, default_compute=CONFIG.compute.compute_cluster

@@ -192,7 +192,7 @@ Alternatively, if you want to set the environment variables yourself before the 
 set -a
 source .env
 set +a
-uv run orchestrator.py
+uv run orchestrator.py --allow-dirty
 ```
 
 This configures an Azure ML DSL pipeline build to execute the gates. It makes use of the azure SDK v2 to configure this. Alternatively, you can create the yaml configuration for this and submit jobs using that instead

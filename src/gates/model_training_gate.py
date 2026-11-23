@@ -5,7 +5,6 @@ from pathlib import Path
 
 import joblib
 
-from config.loader import load_training_config
 from data.preprocessing import (
     TARGET_COL,
     encode_features,
@@ -13,6 +12,7 @@ from data.preprocessing import (
     load_data,
     load_drift_output,
 )
+from model.config.load import load_tuning_config
 from model.tuner import final_training_run, run_tuning
 from utils.logging_utils import setup_logging
 
@@ -33,8 +33,15 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Mounted input path for new data to check",
     )
+    p.add_argument("--git-sha", type=str, required=True, help="git SHA for current run")
     p.add_argument(
         "--final-run", type=str, required=True, help="The final run id for model"
+    )
+    p.add_argument(
+        "--config",
+        type=Path,
+        default=Path("configs/training_config.yaml"),
+        help="Config path for model tuning",
     )
     return p.parse_args()
 
@@ -47,8 +54,7 @@ def run(args: argparse.Namespace) -> str:
     logger.info(f"Drift output from drift gate: {result}")
 
     if result == "drifted":
-
-        config = load_training_config()
+        config = load_tuning_config(args.config)
 
         train, val, test = load_data(args.training_data)
         num_cols, cat_cols = infer_schema(train)
@@ -112,6 +118,7 @@ def run(args: argparse.Namespace) -> str:
             dataset_uri=args.training_data,
             features=num_cols + cat_cols,
             max_epochs=config.optuna.max_epochs,
+            git_sha=args.git_sha,
         )
 
         logger.info(f"Final training complete. Best F1-score: {best_val_f1}")

@@ -114,6 +114,7 @@ def generate_model_card(
     run_id: str,
     dataset_uri: str,
     features: list[str],
+    git_sha: str,
     params: dict[str, float | int],
     metrics: dict[str, float | int],
 ) -> str:
@@ -134,6 +135,7 @@ def generate_model_card(
 - **Date:** {datetime.datetime.now(datetime.UTC)}
 - **Framework:** PyTorch Lightning / PyTorch {framework_version}
 - **MLflow Run ID:** {run_id}
+- ** Git SHA**: {git_sha}
 
 ## Intended Use
 To classify people and their sleep data to assess their risks of 
@@ -163,12 +165,13 @@ def generate_model_card_and_save(
     framework_version: str,
     run_id: str,
     dataset_uri: str,
+    git_sha: str,
     features: list[str],
     params: dict[str, float | int],
     metrics: dict[str, float | int],
 ):
     card_md = generate_model_card(
-        framework_version, run_id, dataset_uri, features, params, metrics
+        framework_version, run_id, dataset_uri, features, git_sha, params, metrics
     )
 
     with tempfile.TemporaryDirectory() as tmp:

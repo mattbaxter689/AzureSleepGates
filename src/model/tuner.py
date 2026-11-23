@@ -9,18 +9,22 @@ import mlflow
 import optuna
 import pandas as pd
 import torch
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers.mlflow import MLFlowLogger
 from optuna.integration import PyTorchLightningPruningCallback
 
-from config.training_config import CategoricalParam, FloatParam, OptunaConfig, ParamSpec
 from data.dataset import make_dataloaders
 from model.callbacks import (
-    MlflowArtifactCallback,
+    make_artifact_callback,
     make_checkpoint,
     make_early_stopping,
 )
 from model.classifier import SleepClassifier
+from model.config.training_config import (
+    CategoricalParam,
+    FloatParam,
+    OptunaConfig,
+    ParamSpec,
+)
 
 os.environ["MLFLOW_DISABLE_LOGGED_MODELS"] = "true"
 
@@ -62,7 +66,10 @@ def make_objective(
 
     def objective(trial: optuna.Trial) -> float:
 
+        pl.seed_everything(42, workers=True)
+
         # CUDA errors requires this for my GPU training
+        # Could also be due to old CUDA instance used in project
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -102,13 +109,12 @@ def make_objective(
                 )
 
                 pruning_cb = PyTorchLightningPruningCallback(trial, monitor="val_f1")
-                early_stop = EarlyStopping(monitor="val_f1", mode="max", patience=3)
+                early_stop = make_early_stopping(patience=3, monitor="val_f1")
 
-                # 4. Bind the Lightning logger strictly to this child run ID
+                # Bind the Lightning logger strictly to this child run ID
                 mlflow_logger = MLFlowLogger(
                     tracking_uri=TRACKING_URI, run_id=child_run.info.run_id
                 )
-
                 mlflow.log_params(params)
 
                 trainer = pl.Trainer(
@@ -130,16 +136,15 @@ def make_objective(
                     )
                     raise
 
-                val_f1 = trainer.callback_metrics.get("val_f1", 0.0)
+                if early_stop.best_score is None:
+                    raise RuntimeError("val_f1 was never logged")
+                val_f1 = float(early_stop.best_score)
                 mlflow.log_metric("final_val_f1", float(val_f1))
 
                 return float(val_f1)
 
             finally:
-                if model is not None:
-                    del model
-                if trainer is not None:
-                    del trainer
+                del model, trainer
                 gc.collect()
                 torch.cuda.empty_cache()
 
@@ -162,6 +167,8 @@ def run_tuning(
     study = optuna.create_study(
         direction="maximize",
         study_name="sleep-classification-tuner",
+        storage="sqlite:///optuna.db",
+        load_if_exists=True,
         pruner=optuna.pruners.MedianPruner(
             n_startup_trials=optuna_config.startup_trials,
             n_warmup_steps=optuna_config.warmup_steps,
@@ -202,6 +209,7 @@ def final_training_run(
     encoder_path: str,
     dataset_uri: str,
     features: list[str],
+    git_sha: str,
     ckpt_dir: str = "checkpoints",
     max_epochs: int = 50,
 ) -> tuple[str, float]:
@@ -232,12 +240,8 @@ def final_training_run(
 
     ckpt_cb = make_checkpoint(ckpt_dir)
     early_stopping = make_early_stopping(patience=5)
-    artifact_db = MlflowArtifactCallback(
-        ckpt_cb,
-        scaler_path=str(scaler_path),
-        label_encoder_path=str(encoder_path),
-        features=features,
-        dataset_uri=dataset_uri,
+    artifact_db = make_artifact_callback(
+        ckpt_cb, scaler_path, encoder_path, features, dataset_uri, git_sha
     )
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
@@ -262,8 +266,9 @@ def final_training_run(
         )
         trainer.fit(model, train_loader, val_loader)
         best_val_f1 = float(trainer.callback_metrics.get("val_f1", 0.0))
+        best_val_f1 = float(ckpt_cb.best_model_score)
 
-        test_results = trainer.test(model, test_loader, verbose=False)
+        test_results = trainer.test(model, test_loader, ckpt_path="best", verbose=False)
         if test_results:
             test_metrics = test_results[0]
 

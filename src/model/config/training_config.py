@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+# Define all base model configs for training information
 class CategoricalParam(BaseModel):
     """
     Will hold the categorical data parsed from yaml
