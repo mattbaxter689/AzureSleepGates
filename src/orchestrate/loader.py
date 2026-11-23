@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from orchestrator.config import OrchestratorConfig
+from orchestrate.config import OrchestratorConfig
 
 ORCHESTRATOR_ROOT = Path(__file__).parent.parent.parent
 _VAR_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")

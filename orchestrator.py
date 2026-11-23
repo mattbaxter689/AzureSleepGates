@@ -1,15 +1,15 @@
 import logging
-import sys
 from pathlib import Path
+import os
+import subprocess
 
 from azure.ai.ml import Input, MLClient, Output, command, dsl
-from azure.ai.ml.entities import Command, PipelineJobSettings
+from azure.ai.ml.entities import Command
 from azure.identity import DefaultAzureCredential
 from rich.console import Console
-from rich.panel import Panel
 
-from src.orchestrator.config import OrchestratorConfig
-from src.orchestrator.loader import load_orchestrator_config
+from src.orchestrate.config import OrchestratorConfig
+from src.orchestrate.loader import load_orchestrator_config
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
 log = logging.getLogger("orchestrator")
@@ -19,6 +19,22 @@ ROOT = Path(__file__).parent
 CONFIG: OrchestratorConfig = load_orchestrator_config(
     "settings/orchestrator_config.yaml"
 )
+
+
+# ----- git SHA configuration -----
+def resolve_git_sha() -> str:
+    # CI first: GitHub Actions, Azure DevOps, or your own override
+    sha = os.getenv("GITHUB_SHA")
+    if sha:
+        return sha
+
+    # local fallback, if environment not set
+    try:
+        if subprocess.call(["git", "diff", "--quiet"]) != 0:
+            raise SystemExit("Working tree is dirty; commit before submitting.")
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        raise SystemExit("Could not determine git SHA; set GIT_SHA.")
 
 
 # ----- AML client and environment -------
@@ -175,33 +191,34 @@ def build_pipeline(raw_data: Input, gold_data: Input):
 
 
 def main() -> None:
-    ml_client = get_client()
-
-    pipeline_job = build_pipeline(
-        raw_data=Input(type="uri_file", path=CONFIG.data.name),
-        gold_data=Input(type="uri_file", path=CONFIG.data.name),
-    )
-    pipeline_job.settings = PipelineJobSettings(
-        force_rerun=True, default_compute=CONFIG.compute.compute_cluster
-    )
-
-    try:
-        returned_job = ml_client.jobs.create_or_update(pipeline_job)
-        job_url = returned_job.studio_url
-        console.print("\n[bold cyan]▶ Pipeline submitted[/bold cyan]")
-        console.print(f"  Job ID : {returned_job.name}")
-        console.print(f"  Studio : [link={job_url}]{job_url}[/link]")
-
-        # Stream logs — blocks until pipeline completes
-        ml_client.jobs.stream(returned_job.name)
-
-        console.print(Panel("[bold green]Pipeline complete[/bold green]"))
-
-    except RuntimeError as exc:
-        console.print(
-            Panel(f"[bold red]Pipeline halted:\n{exc}[/bold red]", title="FAILED")
-        )
-        sys.exit(1)
+    print(resolve_git_sha())
+    # ml_client = get_client()
+    #
+    # pipeline_job = build_pipeline(
+    #     raw_data=Input(type="uri_file", path=CONFIG.data.name),
+    #     gold_data=Input(type="uri_file", path=CONFIG.data.name),
+    # )
+    # pipeline_job.settings = PipelineJobSettings(
+    #     force_rerun=True, default_compute=CONFIG.compute.compute_cluster
+    # )
+    #
+    # try:
+    #     returned_job = ml_client.jobs.create_or_update(pipeline_job)
+    #     job_url = returned_job.studio_url
+    #     console.print("\n[bold cyan]▶ Pipeline submitted[/bold cyan]")
+    #     console.print(f"  Job ID : {returned_job.name}")
+    #     console.print(f"  Studio : [link={job_url}]{job_url}[/link]")
+    #
+    #     # Stream logs — blocks until pipeline completes
+    #     ml_client.jobs.stream(returned_job.name)
+    #
+    #     console.print(Panel("[bold green]Pipeline complete[/bold green]"))
+    #
+    # except RuntimeError as exc:
+    #     console.print(
+    #         Panel(f"[bold red]Pipeline halted:\n{exc}[/bold red]", title="FAILED")
+    #     )
+    #     sys.exit(1)
 
 
 if __name__ == "__main__":
